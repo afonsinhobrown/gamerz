@@ -20,6 +20,13 @@
   #keys span.on { color: #ffd27f; }
   #climb { color: #ffd27f; font-weight: 700; opacity: 0; transition: opacity .15s; }
   #climb.show { opacity: 1; }
+  #menu {
+    position: fixed; top: 16px; right: 16px; z-index: 10; pointer-events: auto;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.3);
+    color: #fff; padding: 9px 18px; border-radius: 8px; text-decoration: none;
+    font-size: 13px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  }
+  #menu:hover { background: rgba(255,255,255,.2); }
 
   #touch { position: fixed; inset: 0; pointer-events: none; touch-action: none; user-select: none; }
   #touch .ctl { position: absolute; pointer-events: auto; }
@@ -53,6 +60,7 @@
   <div id="climb">▲ Segura [Shift] para escalar</div>
   <div id="hint">WASD mover · Shift correr/escalar · Espaço saltar</div>
 </div>
+<a id="menu" href="index.html">‹ Menu</a>
 
 <div id="touch">
   <div id="stick" class="ctl"><div id="knob" class="knob"></div></div>

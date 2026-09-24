@@ -23,6 +23,13 @@
     text-shadow: 0 2px 10px rgba(0,0,0,.9); opacity: 0; transition: opacity .25s;
   }
   #msg.show { opacity: 1; }
+  #menu {
+    position: fixed; top: 14px; right: 16px; z-index: 10;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.3);
+    color: #fff; padding: 9px 18px; border-radius: 8px; text-decoration: none;
+    font-size: 13px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  }
+  #menu:hover { background: rgba(255,255,255,.2); }
   #touch { position: fixed; inset: 0; pointer-events: none; touch-action: none; user-select: none; }
   #touch .ctl { position: absolute; pointer-events: auto; }
   #stick {
@@ -50,6 +57,7 @@
   <div id="floor">Andar 1 / 5</div>
   <div id="enemies">Assassinos: 0</div>
 </div>
+<a id="menu" href="index.html">‹ Menu</a>
 <div id="hint">WASD mover · Clique/Espaço atacar</div>
 <div id="msg"></div>
 
@@ -173,8 +181,7 @@ function buildFloor(n) {
   // paredes
   const wallH = 7, t = 2;
   const walls = [
-    [0, -half, size + t, t],       // norte
-    [0, half, size + t, t],        // sul
+    [0, -half, size + t, t],       // norte (fundo)
     [-half, 0, t, size + t],       // oeste
     [half, 0, t, size + t],        // leste
   ];
@@ -370,8 +377,8 @@ function animate() {
   animateBodies(dt);
 
   // câmara (3ª pessoa, offset fixo atrás)
-  const camTarget = new THREE.Vector3(player.position.x, player.position.y + 1.2, player.position.z);
-  const camPos = new THREE.Vector3(player.position.x, player.position.y + 9.5, player.position.z + 11.5);
+  const camTarget = new THREE.Vector3(player.position.x, player.position.y + 1.0, player.position.z);
+  const camPos = new THREE.Vector3(player.position.x, player.position.y + 7.5, player.position.z + 9.5);
   camera.position.lerp(camPos, 1 - Math.pow(0.0015, dt));
   camera.lookAt(camTarget);
 
