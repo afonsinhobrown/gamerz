@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Gamerz — Tower Brawler</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #05070c; font-family: system-ui, sans-serif; }
+  canvas { display: block; touch-action: none; }
+  #hud {
+    position: fixed; inset: 0; pointer-events: none; color: #e8eef5;
+    text-shadow: 0 1px 3px rgba(0,0,0,.85);
+    padding: 14px 18px; display: flex; flex-direction: column; gap: 4px;
+    font-size: 14px; letter-spacing: .5px;
+  }
+  #floor { font-size: 20px; font-weight: 800; }
+  #enemies { color: #ff9d9d; }
+  #hint { position: fixed; left: 18px; bottom: 14px; color: #9aa4b2; font-size: 12px; }
+  #msg {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    pointer-events: none; text-align: center; padding: 24px;
+    font-size: 30px; font-weight: 900; color: #ffd27f;
+    text-shadow: 0 2px 10px rgba(0,0,0,.9); opacity: 0; transition: opacity .25s;
+  }
+  #msg.show { opacity: 1; }
+  #touch { position: fixed; inset: 0; pointer-events: none; touch-action: none; user-select: none; }
+  #touch .ctl { position: absolute; pointer-events: auto; }
+  #stick {
+    left: 22px; bottom: 22px; width: 128px; height: 128px;
+    background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.22);
+    border-radius: 50%; box-sizing: border-box;
+  }
+  #stick .knob {
+    position: absolute; left: 50%; top: 50%; width: 56px; height: 56px;
+    margin: -28px 0 0 -28px; border-radius: 50%;
+    background: rgba(255,255,255,.32); border: 2px solid rgba(255,255,255,.5);
+  }
+  #btnAtk {
+    right: 24px; bottom: 34px; width: 92px; height: 92px; border-radius: 50%;
+    background: rgba(255,80,80,.18); border: 2px solid rgba(255,120,120,.5);
+    color: #fff; font-size: 13px; font-weight: 800; text-transform: uppercase;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #btnAtk:active { background: rgba(255,120,120,.5); }
+  @media (pointer: fine) { #touch { display: none; } }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div id="floor">Andar 1 / 5</div>
+  <div id="enemies">Assassinos: 0</div>
+</div>
+<div id="hint">WASD mover · Clique/Espaço atacar</div>
+<div id="msg"></div>
+
+<div id="touch">
+  <div id="stick" class="ctl"><div id="knob" class="knob"></div></div>
+  <div id="btnAtk" class="ctl">Atacar</div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// ===================== Config =====================
+const FLOOR_COUNT = 5;
+const ENEMIES_PER_FLOOR = [2, 3, 4, 5, 6];
+const PLAYER_SPEED = 6.2;
+const ENEMY_SPEED = 3.6;
+const ATTACK_RANGE = 2.2;
+const ATTACK_ARC = Math.cos(1.0);   // ~57° de cada lado
+const ATTACK_COOLDOWN = 0.45;
+const ENEMY_HIT_RANGE = 1.9;
+const ENEMY_WINDUP = 0.5;
+const ENEMY_COOLDOWN = 1.4;
+
+// ===================== Setup 3D =====================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070c);
+scene.fog = new THREE.Fog(0x05070c, 30, 80);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
+
+scene.add(new THREE.HemisphereLight(0x9fb4d0, 0x1a1a1a, 0.75));
+const sun = new THREE.DirectionalLight(0xffe9c7, 1.3);
+sun.position.set(12, 24, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -30; sun.shadow.camera.right = 30;
+sun.shadow.camera.top = 30; sun.shadow.camera.bottom = -30;
+scene.add(sun);
+
+const world = new THREE.Group();
+scene.add(world);
+
+// ===================== Materiais =====================
+const M = {
+  floor: new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.95 }),
+  wall: new THREE.MeshStandardMaterial({ color: 0x23262e, roughness: 0.9 }),
+  player: new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.6, metalness: 0.3 }),
+  skin: new THREE.MeshStandardMaterial({ color: 0x8d6e5c, roughness: 0.7 }),
+  enemy: new THREE.MeshStandardMaterial({ color: 0x7a1f1f, roughness: 0.6 }),
+  enemyHead: new THREE.MeshStandardMaterial({ color: 0x9c2a2a, roughness: 0.7 }),
+  exit: new THREE.MeshStandardMaterial({ color: 0x3ad07a, emissive: 0x117a3d, emissiveIntensity: 1.2 }),
+  exitLocked: new THREE.MeshStandardMaterial({ color: 0x555b66, roughness: 0.8 }),
+};
+
+// ===================== Boneco (placeholder) =====================
+function makeHumanoid(mat, headMat) {
+  const g = new THREE.Group();
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.95, 0.42), mat);
+  torso.position.y = 1.15; torso.castShadow = true;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.44, 0.44), headMat);
+  head.position.y = 1.86; head.castShadow = true;
+  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.85, 0.2), mat);
+  armL.position.set(-0.47, 1.15, 0); armL.castShadow = true;
+  const armR = armL.clone(); armR.position.x = 0.47;
+  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.9, 0.26), mat);
+  legL.position.set(-0.19, 0.48, 0); legL.castShadow = true;
+  const legR = legL.clone(); legR.position.x = 0.19;
+  g.add(torso, head, armL, armR, legL, legR);
+  g.userData = { torso, head, armL, armR, legL, legR };
+  return g;
+}
+
+// ===================== Estado =====================
+const player = makeHumanoid(M.player, M.skin);
+player.position.set(0, 0, 6);
+scene.add(player);
+
+const state = {
+  floor: 1, phase: 'playing', checkpointFloor: 1,
+  roomSize: 16, attackTimer: 0, playerYaw: Math.PI, hitFlash: 0,
+  deadTimer: 0, invuln: 0,
+};
+let enemies = [];
+let exit = null;
+let exitOpen = false;
+
+const input = { ix: 0, iz: 0, attack: false };
+const keys = {};
+
+// ===================== Construção dos andares =====================
+function clearWorld() {
+  for (const e of [...enemies]) scene.remove(e.mesh);
+  enemies = [];
+  while (world.children.length) {
+    const c = world.children.pop();
+    world.remove(c);
+  }
+  if (exit) { scene.remove(exit); exit = null; }
+}
+
+function buildFloor(n) {
+  clearWorld();
+  const size = state.roomSize = 14 + n * 2;
+  const half = size / 2;
+
+  // chão
+  const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(size, 1, size), M.floor);
+  floorMesh.position.y = -0.5; floorMesh.receiveShadow = true;
+  world.add(floorMesh);
+
+  // paredes
+  const wallH = 7, t = 2;
+  const walls = [
+    [0, -half, size + t, t],       // norte
+    [0, half, size + t, t],        // sul
+    [-half, 0, t, size + t],       // oeste
+    [half, 0, t, size + t],        // leste
+  ];
+  for (const [x, z, w, d] of walls) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), M.wall);
+    m.position.set(x, wallH / 2 - 1, z);
+    m.castShadow = m.receiveShadow = true;
+    world.add(m);
+  }
+
+  // detalhes: colunas (cobertura) para dar sensação de "edifício"
+  for (let i = 0; i < n; i++) {
+    const col = new THREE.Mesh(new THREE.BoxGeometry(1.4, 3, 1.4), M.wall);
+    const angle = (i / n) * Math.PI * 2;
+    col.position.set(Math.cos(angle) * (half - 3), 1, Math.sin(angle) * (half - 3));
+    col.castShadow = col.receiveShadow = true;
+    world.add(col);
+  }
+
+  // saída (escada/porta) no fundo norte
+  exitOpen = false;
+  exit = new THREE.Mesh(new THREE.BoxGeometry(3, 4, 1), M.exitLocked);
+  exit.position.set(0, 2, -half + 1);
+  scene.add(exit);
+
+  // jogador entra a sul
+  player.position.set(0, 0, half - 2.5);
+  player.rotation.y = Math.PI;
+  state.playerYaw = Math.PI;
+
+  // inimigos
+  const count = ENEMIES_PER_FLOOR[n - 1];
+  spawnEnemies(count, half);
+
+  state.phase = 'playing';
+  updateHud();
+  flash(`Andar ${n}`, 900);
+}
+
+function spawnEnemies(count, half) {
+  for (let i = 0; i < count; i++) {
+    const mesh = makeHumanoid(M.enemy, M.enemyHead);
+    let x, z, tries = 0;
+    do {
+      x = (Math.random() * 2 - 1) * (half - 3);
+      z = (Math.random() * 2 - 1) * (half - 3);
+      tries++;
+    } while (Math.hypot(x - player.position.x, z - player.position.z) < 5 && tries < 30);
+    mesh.position.set(x, 0, z);
+    scene.add(mesh);
+    enemies.push({
+      mesh, hp: 1, atkTimer: ENEMY_COOLDOWN * Math.random(),
+      windup: 0, facing: 0, walkPhase: Math.random() * 6,
+    });
+  }
+}
+
+// ===================== Input =====================
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') { e.preventDefault(); input.attack = true; }
+});
+addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (e.code === 'Space') input.attack = false;
+});
+renderer.domElement.addEventListener('mousedown', e => { if (e.button === 0) input.attack = true; });
+addEventListener('mouseup', e => { if (e.button === 0) input.attack = false; });
+
+// Tátil
+const touch = { x: 0, y: 0, running: false };
+const stickEl = document.getElementById('stick');
+const knobEl = document.getElementById('knob');
+const R = 42;
+let touchActive = false, cx = 0, cy = 0;
+stickEl.addEventListener('touchstart', e => {
+  e.preventDefault(); touchActive = true;
+  const t = e.touches[0], r = stickEl.getBoundingClientRect();
+  cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+  moveStick(t.clientX, t.clientY);
+}, { passive: false });
+stickEl.addEventListener('touchmove', e => { e.preventDefault(); moveStick(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+stickEl.addEventListener('touchend', e => { e.preventDefault(); touchActive = false; touch.x = touch.y = 0; knobEl.style.transform = 'translate(0,0)'; }, { passive: false });
+function moveStick(px, py) {
+  let dx = px - cx, dy = py - cy;
+  const len = Math.hypot(dx, dy);
+  if (len > R) { dx = dx / len * R; dy = dy / len * R; }
+  touch.x = dx / R; touch.y = -dy / R;
+  knobEl.style.transform = `translate(${dx}px,${dy}px)`;
+}
+const atkBtn = document.getElementById('btnAtk');
+atkBtn.addEventListener('touchstart', e => { e.preventDefault(); input.attack = true; }, { passive: false });
+atkBtn.addEventListener('touchend', e => { e.preventDefault(); input.attack = false; }, { passive: false });
+
+// ===================== HUD =====================
+const floorEl = document.getElementById('floor');
+const enemiesEl = document.getElementById('enemies');
+const msgEl = document.getElementById('msg');
+let msgTimer = 0;
+function updateHud() {
+  floorEl.textContent = `Andar ${state.floor} / ${FLOOR_COUNT}`;
+  enemiesEl.textContent = `Assassinos: ${enemies.filter(e => e.hp > 0).length}`;
+}
+function flash(text, ms = 1200) {
+  msgEl.textContent = text;
+  msgEl.classList.add('show');
+  msgTimer = ms / 1000;
+}
+
+// ===================== Combate =====================
+function playerAttack() {
+  if (state.attackTimer > 0) return;
+  state.attackTimer = ATTACK_COOLDOWN;
+  const fx = Math.sin(state.playerYaw), fz = Math.cos(state.playerYaw);
+  let hitAny = false;
+  for (const e of enemies) {
+    if (e.hp <= 0) continue;
+    const dx = e.mesh.position.x - player.position.x;
+    const dz = e.mesh.position.z - player.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > ATTACK_RANGE) continue;
+    const dot = (dx / dist) * fx + (dz / dist) * fz;
+    if (dot < ATTACK_ARC) continue;
+    e.hp = 0;
+    hitAny = true;
+    e.mesh.visible = false;
+  }
+  if (hitAny) { updateHud(); checkCleared(); }
+}
+
+function checkCleared() {
+  if (state.phase !== 'playing') return;
+  if (enemies.every(e => e.hp <= 0)) {
+    exitOpen = true;
+    exit.material = M.exit;
+    flash('Andar limpo! Sobe pela porta verde →', 1600);
+  }
+}
+
+function playerHit() {
+  if (state.phase !== 'playing' || state.invuln > 0) return;
+  state.phase = 'dying';
+  state.deadTimer = 1.6;
+  state.hitFlash = 1;
+  const below = Math.max(1, state.floor - 1);
+  flash(`ATINGIDO! A recomeçar no andar ${below}...`, 1600);
+}
+
+// ===================== Loop =====================
+const clock = new THREE.Clock();
+let walkT = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  walkT += dt;
+
+  // temporizadores de HUD
+  if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) msgEl.classList.remove('show'); }
+  if (state.attackTimer > 0) state.attackTimer -= dt;
+  if (state.hitFlash > 0) state.hitFlash = Math.max(0, state.hitFlash - dt * 2);
+  if (state.invuln > 0) state.invuln -= dt;
+
+  // input
+  let ix = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0) + touch.x;
+  let iz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + touch.y;
+
+  if (state.phase === 'playing') {
+    const mag = Math.hypot(ix, iz);
+    if (mag > 0.05) {
+      const yaw = Math.atan2(ix, iz);
+      state.playerYaw = yaw;
+      player.rotation.y = yaw;
+      const spd = PLAYER_SPEED;
+      player.position.x += (ix / mag) * spd * dt;
+      player.position.z += (iz / mag) * spd * dt;
+    }
+    // limites da sala
+    const b = state.roomSize / 2 - 0.8;
+    player.position.x = THREE.MathUtils.clamp(player.position.x, -b, b);
+    player.position.z = THREE.MathUtils.clamp(player.position.z, -b, b);
+
+    if (input.attack) playerAttack();
+
+    // saída
+    if (exitOpen) {
+      const d = Math.hypot(player.position.x - exit.position.x, player.position.z - exit.position.z);
+      if (d < 2.2) nextFloor();
+    }
+  }
+
+  updateEnemies(dt);
+  animateBodies(dt);
+
+  // câmara (3ª pessoa, offset fixo atrás)
+  const camTarget = new THREE.Vector3(player.position.x, player.position.y + 1.2, player.position.z);
+  const camPos = new THREE.Vector3(player.position.x, player.position.y + 9.5, player.position.z + 11.5);
+  camera.position.lerp(camPos, 1 - Math.pow(0.0015, dt));
+  camera.lookAt(camTarget);
+
+  // hit flash no ecrã
+  if (state.hitFlash > 0) renderer.setClearColor(0x661111, 1);
+  else renderer.setClearColor(0x05070c, 1);
+  scene.background.setHex(state.hitFlash > 0 ? 0x661111 : 0x05070c);
+
+  renderer.render(scene, camera);
+}
+
+function updateEnemies(dt) {
+  if (state.phase !== 'playing') {
+    // continua a animar mas sem atacar
+  }
+  for (const e of enemies) {
+    if (e.hp <= 0) continue;
+    const dx = player.position.x - e.mesh.position.x;
+    const dz = player.position.z - e.mesh.position.z;
+    const dist = Math.hypot(dx, dz);
+    const yaw = Math.atan2(dx, dz);
+    e.facing = yaw;
+    e.mesh.rotation.y = yaw;
+
+    if (state.phase !== 'playing' || state.invuln > 0) {
+      // aproxima devagar, sem atacar
+      if (dist > 2) {
+        e.mesh.position.x += (dx / dist) * ENEMY_SPEED * 0.5 * dt;
+        e.mesh.position.z += (dz / dist) * ENEMY_SPEED * 0.5 * dt;
+      }
+      e.windup = 0;
+      e.atkTimer = Math.max(e.atkTimer, 0.6);
+      continue;
+    }
+
+    if (e.windup > 0) {
+      e.windup -= dt;
+      e.mesh.userData.torso.material = M.enemy;
+      if (e.windup <= 0) {
+        // golpe
+        if (dist < ENEMY_HIT_RANGE) playerHit();
+        e.atkTimer = ENEMY_COOLDOWN;
+      }
+      continue;
+    }
+
+    if (e.atkTimer > 0) e.atkTimer -= dt;
+
+    if (dist > ENEMY_HIT_RANGE - 0.2) {
+      e.mesh.position.x += (dx / dist) * ENEMY_SPEED * dt;
+      e.mesh.position.z += (dz / dist) * ENEMY_SPEED * dt;
+      e.walkPhase += dt * 8;
+    } else if (e.atkTimer <= 0) {
+      e.windup = ENEMY_WINDUP;   // telegrafa o golpe
+    }
+
+    const b = state.roomSize / 2 - 0.8;
+    e.mesh.position.x = THREE.MathUtils.clamp(e.mesh.position.x, -b, b);
+    e.mesh.position.z = THREE.MathUtils.clamp(e.mesh.position.z, -b, b);
+
+    // separa inimigos
+    for (const o of enemies) {
+      if (o === e || o.hp <= 0) continue;
+      const ox = o.mesh.position.x - e.mesh.position.x;
+      const oz = o.mesh.position.z - e.mesh.position.z;
+      const od = Math.hypot(ox, oz);
+      if (od > 0.01 && od < 1.2) {
+        e.mesh.position.x -= (ox / od) * 0.5 * dt;
+        e.mesh.position.z -= (oz / od) * 0.5 * dt;
+      }
+    }
+  }
+}
+
+function animateBodies(dt) {
+  // pernas/braços do jogador
+  const moving = state.phase === 'playing' && (Math.abs(input.ix) > 0.05 || Math.abs(input.iz) > 0.05 || Math.abs(touch.x) > 0.05 || Math.abs(touch.y) > 0.05);
+  const swing = moving ? Math.sin(walkT * 10) * 0.5 : 0;
+  player.userData.legL.rotation.x = swing;
+  player.userData.legR.rotation.x = -swing;
+  player.userData.armL.rotation.x = -swing * 0.6;
+  player.userData.armR.rotation.x = state.attackTimer > ATTACK_COOLDOWN - 0.18 ? -1.6 : swing * 0.6;
+
+  for (const e of enemies) {
+    if (e.hp <= 0) continue;
+    const s = Math.sin(e.walkPhase) * 0.5;
+    e.mesh.userData.legL.rotation.x = s;
+    e.mesh.userData.legR.rotation.x = -s;
+    e.mesh.userData.armL.rotation.x = e.windup > 0 ? -1.5 : -s * 0.6;
+    e.mesh.userData.armR.rotation.x = e.windup > 0 ? -1.5 : s * 0.6;
+  }
+}
+
+function nextFloor() {
+  if (state.floor >= FLOOR_COUNT) {
+    state.phase = 'won';
+    flash('VITÓRIA! Chegaste ao topo 🏆', 999999);
+    return;
+  }
+  state.floor++;
+  state.invuln = 1.2;
+  buildFloor(state.floor);
+}
+
+// ===================== Iniciar =====================
+buildFloor(1);
+updateHud();
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
