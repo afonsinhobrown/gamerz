@@ -15,6 +15,9 @@
   }
   #hud b { font-size: 15px; }
   #hint { opacity: .75; }
+  #keys { opacity: .9; font-size: 12px; }
+  #keys span { transition: color .1s; color: #8b93a1; }
+  #keys span.on { color: #ffd27f; }
   #climb { color: #ffd27f; font-weight: 700; opacity: 0; transition: opacity .15s; }
   #climb.show { opacity: 1; }
 
@@ -46,6 +49,7 @@
 <body>
 <div id="hud">
   <div><b id="state">No chão</b></div>
+  <div id="keys"></div>
   <div id="climb">▲ Segura [Shift] para escalar</div>
   <div id="hint">WASD mover · Shift correr/escalar · Espaço saltar</div>
 </div>
@@ -159,8 +163,9 @@ const state = {
   vy: 0, speed: 0, yaw: 0,
 };
 const keys = {};
+const keysHud = document.getElementById('keys');
 addEventListener('keydown', e => {
-  if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'Space') { e.preventDefault(); jumpQueued = true; jumpTime = 0.14; }
   keys[e.code] = true;
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
@@ -219,7 +224,7 @@ runBtn.addEventListener('touchstart', e => { e.preventDefault(); touch.running =
 runBtn.addEventListener('touchend', e => { e.preventDefault(); touch.running = false; runBtn.classList.remove('on'); }, { passive: false });
 
 const jumpBtn = document.getElementById('btnJump');
-jumpBtn.addEventListener('touchstart', e => { e.preventDefault(); touch.jumpQueued = true; }, { passive: false });
+jumpBtn.addEventListener('touchstart', e => { e.preventDefault(); jumpQueued = true; jumpTime = 0.14; }, { passive: false });
 
 const GRAVITY = -22;
 const WALK = 5, RUN = 9, JUMP = 9;
@@ -284,6 +289,10 @@ function tryClimb() {
 // ---------- Loop ----------
 const clock = new THREE.Clock();
 let climbing = false;
+let jumpQueued = false;   // espaço carregado (buffer ~0.14s)
+let jumpTime = 0;
+let coyote = 0;           // permite saltar 0.12s depois de sair do chão
+let wasGrounded = true;
 
 function animate() {
   requestAnimationFrame(animate);
@@ -310,23 +319,31 @@ function animate() {
   }
   climbHud.classList.remove('show');
 
-  // Gravidade / chão
+  // Gravidade / chão (só "re-aterra" quando está a cair, senão o salto era anulado)
   const g = groundUnder(player.position);
-  if (player.position.y > g + 0.05) {
+  const onGround = player.position.y <= g + 0.05;
+  if (onGround && state.vy <= 0) {
+    player.position.y = g;
+    state.vy = 0;
+    state.grounded = true;
+  } else {
     state.vy += GRAVITY * dt;
     player.position.y += state.vy * dt;
-  } else {
-    if (player.position.y < g) player.position.y = g;
-    state.grounded = true;
-    state.vy = 0;
+    state.grounded = false;
   }
 
-  // Salto (tecla ou botão tátil)
-  const wantJump = keys['Space'] || touch.jumpQueued;
+  // Temporizadores (buffer de salto + coyote)
+  if (jumpQueued) jumpTime -= dt;
+  else jumpTime = 0;
+  if (!state.grounded) coyote -= dt; else coyote = 0.12;
+  wasGrounded = state.grounded;
+
   touch.jumpQueued = false;
-  if (wantJump && state.grounded) {
+  if (jumpTime > 0 && (state.grounded || coyote > 0)) {
     state.vy = JUMP;
     state.grounded = false;
+    coyote = -999;   // um salto por carregamento
+    jumpTime = 0;
   }
 
   // Movimento horizontal (controlo aéreo reduzido a 60%)
@@ -351,6 +368,11 @@ function animate() {
       THREE.MathUtils.euclideanModulo(player.rotation.y, Math.PI*2),
       THREE.MathUtils.euclideanModulo(targetYaw, Math.PI*2), 0.15);
   }
+
+  // Legendas de teclas (feedback visual do que está carregado)
+  const shiftOn = keys['ShiftLeft'] || keys['ShiftRight'];
+  const spaceOn = keys['Space'];
+  keysHud.innerHTML = `<span class="${shiftOn ? 'on' : ''}">Shift ${shiftOn ? '●' : '○'}</span> · <span class="${spaceOn ? 'on' : ''}">Espaço ${spaceOn ? '●' : '○'}</span>`;
 
   if (state.grounded) hud.textContent = ix||iz ? (running ? 'A correr' : 'A andar') : 'No chão';
   else hud.textContent = 'No ar';
