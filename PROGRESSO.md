@@ -41,6 +41,7 @@ Cada jogo é uma página própria (ex.: `tower.html`) e o hub lista os jogos dis
 - Página inicial com a lista de jogos para selecionar (sem escrever endereços).
 - Basta abrir `gamerz-plum.vercel.app` e escolher o jogo.
 - Cartão "Em breve" para novos jogos.
+- **Regra:** todo o jogo tem um botão **‹ Menu** (canto superior direito) para voltar à landing page.
 
 ---
 
@@ -56,10 +57,15 @@ Cada jogo é uma página própria (ex.: `tower.html`) e o hub lista os jogos dis
 8. **Testes automatizados** em Node a provar salto e corrida
 9. **Tower Brawler v1** criado (`tower.html`)
 10. **Hub / landing page** criado (`index.html`) — lista de jogos com seleção
+11. **Tower Brawler corrigido:** a câmara/parede tapavam a visão (removida a parede de trás; câmara ajustada)
+12. **Botão Menu** adicionado a todos os jogos (voltar à landing page)
+13. **Morrer/recém-começar:** ao ser atingido, ecrã a vermelho, mensagem e reinício no andar de baixo (~1,6s), com invencibilidade temporária. (Estava com bug — ficava parado — já corrigido.)
 
 ---
 
-## Próximo passo — Personagens 3D
+## Próximo passo
+
+**Para testar já:** abrir https://gamerz-plum.vercel.app → escolher **Tower Brawler** → jogar os 5 andares.
 
 ### Personagens 3D
 | Tema | Detalhe |
