@@ -6,7 +6,7 @@
 <title>Gamerz — Protótipo Browser</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0e14; font-family: system-ui, sans-serif; }
-  canvas { display: block; }
+  canvas { display: block; touch-action: none; }
   #hud {
     position: fixed; inset: 0; pointer-events: none;
     color: #e8eef5; text-shadow: 0 1px 3px rgba(0,0,0,.8);
@@ -17,6 +17,30 @@
   #hint { opacity: .75; }
   #climb { color: #ffd27f; font-weight: 700; opacity: 0; transition: opacity .15s; }
   #climb.show { opacity: 1; }
+
+  #touch { position: fixed; inset: 0; pointer-events: none; touch-action: none; user-select: none; }
+  #touch .ctl { position: absolute; pointer-events: auto; }
+  #stick {
+    left: 24px; bottom: 24px; width: 128px; height: 128px;
+    background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.25);
+    border-radius: 50%; box-sizing: border-box;
+  }
+  #stick .knob {
+    position: absolute; left: 50%; top: 50%; width: 56px; height: 56px;
+    margin: -28px 0 0 -28px; border-radius: 50%;
+    background: rgba(255,255,255,.35); border: 2px solid rgba(255,255,255,.5);
+  }
+  .btn {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.35);
+    color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .5px;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    text-transform: uppercase; touch-action: none; user-select: none;
+  }
+  .btn:active, .btn.on { background: rgba(255,210,127,.4); }
+  #btnRun { right: 24px; bottom: 120px; }
+  #btnJump { right: 24px; bottom: 24px; }
+  @media (pointer: coarse) { #hint { display: none; } }
 </style>
 </head>
 <body>
@@ -24,6 +48,12 @@
   <div><b id="state">No chão</b></div>
   <div id="climb">▲ Segura [Shift] para escalar</div>
   <div id="hint">WASD mover · Shift correr/escalar · Espaço saltar</div>
+</div>
+
+<div id="touch">
+  <div id="stick" class="ctl"><div id="knob" class="knob"></div></div>
+  <div id="btnRun" class="ctl btn">Correr</div>
+  <div id="btnJump" class="ctl btn">Saltar</div>
 </div>
 
 <script type="importmap">
@@ -129,8 +159,67 @@ const state = {
   vy: 0, speed: 0, yaw: 0,
 };
 const keys = {};
-addEventListener('keydown', e => { keys[e.code] = true; });
+addEventListener('keydown', e => {
+  if (e.code === 'Space') e.preventDefault();
+  keys[e.code] = true;
+});
 addEventListener('keyup', e => { keys[e.code] = false; });
+
+// Mostrar texto de escalada adaptado ao dispositivo
+const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const climbEl = document.getElementById('climb');
+if (isTouch) climbEl.textContent = '▲ Segura [Correr] para escalar';
+
+// ---------- Controles táteis (telemóvel) ----------
+const touch = { x: 0, y: 0, running: false, jumpQueued: false, active: false };
+const stickEl = document.getElementById('stick');
+const knobEl = document.getElementById('knob');
+const R = 40;
+
+stickEl.addEventListener('touchstart', e => {
+  e.preventDefault();
+  touch.active = true;
+  const t = e.touches[0];
+  const rect = stickEl.getBoundingClientRect();
+  touch.cx = rect.left + rect.width / 2;
+  touch.cy = rect.top + rect.height / 2;
+  touch.tx = t.clientX;
+  touch.ty = t.clientY;
+  updateStick();
+}, { passive: false });
+
+stickEl.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  touch.tx = t.clientX;
+  touch.ty = t.clientY;
+  updateStick();
+}, { passive: false });
+
+stickEl.addEventListener('touchend', e => {
+  e.preventDefault();
+  touch.active = false;
+  touch.x = touch.y = 0;
+  knobEl.style.transform = 'translate(0px, 0px)';
+}, { passive: false });
+
+function updateStick() {
+  if (!touch.active) return;
+  let dx = touch.tx - touch.cx;
+  let dy = touch.ty - touch.cy;
+  const len = Math.hypot(dx, dy);
+  if (len > R) { dx = dx / len * R; dy = dy / len * R; }
+  touch.x = dx / R;
+  touch.y = -dy / R;
+  knobEl.style.transform = `translate(${dx}px, ${dy}px)`;
+}
+
+const runBtn = document.getElementById('btnRun');
+runBtn.addEventListener('touchstart', e => { e.preventDefault(); touch.running = true; runBtn.classList.add('on'); }, { passive: false });
+runBtn.addEventListener('touchend', e => { e.preventDefault(); touch.running = false; runBtn.classList.remove('on'); }, { passive: false });
+
+const jumpBtn = document.getElementById('btnJump');
+jumpBtn.addEventListener('touchstart', e => { e.preventDefault(); touch.jumpQueued = true; }, { passive: false });
 
 const GRAVITY = -22;
 const WALK = 5, RUN = 9, JUMP = 9;
@@ -200,10 +289,10 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
 
-  // Input de movimento
-  let ix = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
-  let iz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0);
-  const running = keys['ShiftLeft'] || keys['ShiftRight'];
+  // Input combinado: teclado (PC) + tátil (telemóvel)
+  let ix = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0) + touch.x;
+  let iz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + touch.y;
+  const running = (keys['ShiftLeft'] || keys['ShiftRight']) || touch.running;
   state.speed = running ? RUN : WALK;
 
   const hud = document.getElementById('state');
@@ -232,8 +321,10 @@ function animate() {
     state.vy = 0;
   }
 
-  // Salto
-  if (keys['Space'] && state.grounded) {
+  // Salto (tecla ou botão tátil)
+  const wantJump = keys['Space'] || touch.jumpQueued;
+  touch.jumpQueued = false;
+  if (wantJump && state.grounded) {
     state.vy = JUMP;
     state.grounded = false;
   }
