@@ -3,407 +3,88 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Gamerz — Protótipo Browser</title>
+<title>Gamerz — Jogos</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0e14; font-family: system-ui, sans-serif; }
-  canvas { display: block; touch-action: none; }
-  #hud {
-    position: fixed; inset: 0; pointer-events: none;
-    color: #e8eef5; text-shadow: 0 1px 3px rgba(0,0,0,.8);
-    display: flex; flex-direction: column; justify-content: flex-end;
-    padding: 16px 20px; gap: 4px; font-size: 13px; letter-spacing: .5px;
+  :root { --bg: #05070c; --card: #12161f; --line: #232a36; --txt: #e8eef5; --dim: #8b95a5; --gold: #ffd27f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--txt); font-family: system-ui, -apple-system, sans-serif; }
+  body {
+    background-image:
+      radial-gradient(900px 500px at 15% -10%, rgba(255,210,127,.10), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(90,130,255,.10), transparent 55%);
+    padding: 40px 20px 80px;
   }
-  #hud b { font-size: 15px; }
-  #hint { opacity: .75; }
-  #keys { opacity: .9; font-size: 12px; }
-  #keys span { transition: color .1s; color: #8b93a1; }
-  #keys span.on { color: #ffd27f; }
-  #climb { color: #ffd27f; font-weight: 700; opacity: 0; transition: opacity .15s; }
-  #climb.show { opacity: 1; }
-
-  #touch { position: fixed; inset: 0; pointer-events: none; touch-action: none; user-select: none; }
-  #touch .ctl { position: absolute; pointer-events: auto; }
-  #stick {
-    left: 24px; bottom: 24px; width: 128px; height: 128px;
-    background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.25);
-    border-radius: 50%; box-sizing: border-box;
+  header { max-width: 1080px; margin: 0 auto 40px; }
+  .brand { font-size: clamp(38px, 8vw, 72px); font-weight: 900; letter-spacing: 8px; margin: 0; }
+  .brand span { color: var(--gold); }
+  .sub { color: var(--dim); margin: 10px 0 0; font-size: 15px; letter-spacing: 1px; }
+  .grid {
+    max-width: 1080px; margin: 0 auto; display: grid; gap: 22px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   }
-  #stick .knob {
-    position: absolute; left: 50%; top: 50%; width: 56px; height: 56px;
-    margin: -28px 0 0 -28px; border-radius: 50%;
-    background: rgba(255,255,255,.35); border: 2px solid rgba(255,255,255,.5);
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    overflow: hidden; display: flex; flex-direction: column;
+    transition: transform .18s ease, border-color .18s ease;
   }
-  .btn {
-    width: 72px; height: 72px; border-radius: 50%;
-    background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.35);
-    color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .5px;
-    display: flex; align-items: center; justify-content: center; text-align: center;
-    text-transform: uppercase; touch-action: none; user-select: none;
+  .card:hover { transform: translateY(-4px); border-color: #384252; }
+  .thumb { height: 150px; position: relative; overflow: hidden; }
+  .thumb .label {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 54px; font-weight: 900; color: rgba(255,255,255,.14); letter-spacing: 4px;
   }
-  .btn:active, .btn.on { background: rgba(255,210,127,.4); }
-  #btnRun { right: 24px; bottom: 120px; }
-  #btnJump { right: 24px; bottom: 24px; }
-  @media (pointer: coarse) { #hint { display: none; } }
+  .t1 { background: linear-gradient(135deg, #7a1f1f, #2a0e0e); }
+  .t2 { background: linear-gradient(135deg, #2b4a72, #0e1a2a); }
+  .t3 { background: linear-gradient(135deg, #2a2f38, #14171d); }
+  .body { padding: 16px 18px 20px; display: flex; flex-direction: column; flex: 1; }
+  .body h2 { margin: 0 0 6px; font-size: 19px; }
+  .body p { margin: 0 0 18px; color: var(--dim); font-size: 13.5px; line-height: 1.5; flex: 1; }
+  .play {
+    display: inline-block; text-align: center; text-decoration: none;
+    background: var(--gold); color: #1a1305; font-weight: 800; letter-spacing: 1px;
+    padding: 12px 16px; border-radius: 10px; text-transform: uppercase; font-size: 13px;
+  }
+  .play:hover { filter: brightness(1.08); }
+  .soon { color: var(--dim); font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .card.locked { opacity: .6; }
+  footer { max-width: 1080px; margin: 50px auto 0; color: #5b6472; font-size: 12px; }
 </style>
 </head>
 <body>
-<div id="hud">
-  <div><b id="state">No chão</b></div>
-  <div id="keys"></div>
-  <div id="climb">▲ Segura [Shift] para escalar</div>
-  <div id="hint">WASD mover · Shift correr/escalar · Espaço saltar</div>
-</div>
+  <header>
+    <h1 class="brand">GAMER<span>Z</span></h1>
+    <p class="sub">Escolhe um jogo para começar</p>
+  </header>
 
-<div id="touch">
-  <div id="stick" class="ctl"><div id="knob" class="knob"></div></div>
-  <div id="btnRun" class="ctl btn">Correr</div>
-  <div id="btnJump" class="ctl btn">Saltar</div>
-</div>
+  <main class="grid">
+    <article class="card">
+      <div class="thumb t1"><div class="label">TB</div></div>
+      <div class="body">
+        <h2>Tower Brawler</h2>
+        <p>Sobe um edifício de 5 andares e enfrenta assassinos. Um só golpe e recomeças no andar de baixo.</p>
+        <a class="play" href="tower.html">Jogar</a>
+      </div>
+    </article>
 
-<script type="importmap">
-{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
-</script>
-<script type="module">
-import * as THREE from 'three';
+    <article class="card">
+      <div class="thumb t2"><div class="label">EX</div></div>
+      <div class="body">
+        <h2>Exploração</h2>
+        <p>Protótipo de exploração em 3ª pessoa: anda, corre, salta e escala as paredes azuis.</p>
+        <a class="play" href="explore.html">Jogar</a>
+      </div>
+    </article>
 
-// ---------- Setup básico ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-document.body.appendChild(renderer.domElement);
+    <article class="card locked">
+      <div class="thumb t3"><div class="label">+</div></div>
+      <div class="body">
+        <h2>Próximo jogo</h2>
+        <p>Um novo jogo será adicionado aqui em breve.</p>
+        <span class="soon">Em breve</span>
+      </div>
+    </article>
+  </main>
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0e14);
-scene.fog = new THREE.Fog(0x0a0e14, 30, 90);
-
-const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 200);
-camera.position.set(0, 6, -8);
-
-// Luzes
-const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x3a3328, 0.9);
-scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xfff2d6, 1.6);
-sun.position.set(20, 30, 10);
-sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
-sun.shadow.camera.left = -30; sun.shadow.camera.right = 30;
-sun.shadow.camera.top = 30; sun.shadow.camera.bottom = -30;
-scene.add(sun);
-
-// ---------- Nível de teste ----------
-const world = new THREE.Group();
-scene.add(world);
-
-const GROUND = new THREE.Mesh(
-  new THREE.BoxGeometry(40, 1, 40),
-  new THREE.MeshStandardMaterial({ color: 0x6b5c47, roughness: 0.95 })
-);
-GROUND.position.y = -0.5;
-GROUND.receiveShadow = true;
-world.add(GROUND);
-
-// Obstáculos / plataformas (elementos com físico + hitscan para escalada)
-const solids = [];
-function solid(x, y, z, w, h, d, color = 0x8a7a63) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.9 }));
-  m.position.set(x, y, z);
-  m.castShadow = m.receiveShadow = true;
-  world.add(m);
-  solids.push({ mesh: m, size: new THREE.Vector3(w, h, d) });
-  return m;
-}
-
-// Paredes de escalada marcadas (usa cor especial)
-const CLIMB_COLOR = 0x4a6fa5;
-function climbWall(x, z, w, h, d, color = CLIMB_COLOR) {
-  const c = 0x2c4a72;
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
-    new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.2 }));
-  m.position.set(x, h / 2, z);
-  m.castShadow = m.receiveShadow = true;
-  world.add(m);
-  solids.push({ mesh: m, size: new THREE.Vector3(w, h, d), climb: true });
-}
-
-// Plataformas de salto
-solid(6, 2, -6, 3, 4, 3, 0x8a7a63);
-solid(11, 3.5, -6, 3, 7, 3, 0x8a7a63);
-solid(16, 5, -6, 3, 10, 3, 0x8a7a63);
-
-// Parede de escalada + topo
-climbWall(-8, 0, 3, 6, 3);
-solid(-8, 6, -3, 5, 1, 5, 0x9c8a6f);
-climbWall(-8, 8, 3, 4, 3);
-solid(-8, 8, -3, 5, 1, 5, 0x9c8a6f);
-
-// Segundo curso de escalada
-climbWall(0, 10, 3, 5, 3);
-solid(0, 9.5, 8, 5, 1, 5, 0x9c8a6f);
-
-// ---------- Personagem ----------
-const player = new THREE.Group();
-const body = new THREE.Mesh(
-  new THREE.CapsuleGeometry(0.45, 0.9, 6, 12),
-  new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.7, metalness: 0.3 })
-);
-const coat = new THREE.Mesh(
-  new THREE.CapsuleGeometry(0.5, 0.7, 6, 12),
-  new THREE.MeshStandardMaterial({ color: 0x101014, roughness: 0.8 })
-);
-coat.position.y = 0.15;
-player.add(coat, body);
-player.position.set(0, 1, 4);
-scene.add(player);
-
-// ---------- Estado / física simples ----------
-const state = {
-  grounded: true, climbing: false, jumpHeld: false,
-  vy: 0, speed: 0, yaw: 0,
-};
-const keys = {};
-const keysHud = document.getElementById('keys');
-addEventListener('keydown', e => {
-  if (e.code === 'Space') { e.preventDefault(); jumpQueued = true; jumpTime = 0.14; }
-  keys[e.code] = true;
-});
-addEventListener('keyup', e => { keys[e.code] = false; });
-
-// Mostrar texto de escalada adaptado ao dispositivo
-const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const climbEl = document.getElementById('climb');
-if (isTouch) climbEl.textContent = '▲ Segura [Correr] para escalar';
-
-// ---------- Controles táteis (telemóvel) ----------
-const touch = { x: 0, y: 0, running: false, jumpQueued: false, active: false };
-const stickEl = document.getElementById('stick');
-const knobEl = document.getElementById('knob');
-const R = 40;
-
-stickEl.addEventListener('touchstart', e => {
-  e.preventDefault();
-  touch.active = true;
-  const t = e.touches[0];
-  const rect = stickEl.getBoundingClientRect();
-  touch.cx = rect.left + rect.width / 2;
-  touch.cy = rect.top + rect.height / 2;
-  touch.tx = t.clientX;
-  touch.ty = t.clientY;
-  updateStick();
-}, { passive: false });
-
-stickEl.addEventListener('touchmove', e => {
-  e.preventDefault();
-  const t = e.touches[0];
-  touch.tx = t.clientX;
-  touch.ty = t.clientY;
-  updateStick();
-}, { passive: false });
-
-stickEl.addEventListener('touchend', e => {
-  e.preventDefault();
-  touch.active = false;
-  touch.x = touch.y = 0;
-  knobEl.style.transform = 'translate(0px, 0px)';
-}, { passive: false });
-
-function updateStick() {
-  if (!touch.active) return;
-  let dx = touch.tx - touch.cx;
-  let dy = touch.ty - touch.cy;
-  const len = Math.hypot(dx, dy);
-  if (len > R) { dx = dx / len * R; dy = dy / len * R; }
-  touch.x = dx / R;
-  touch.y = -dy / R;
-  knobEl.style.transform = `translate(${dx}px, ${dy}px)`;
-}
-
-const runBtn = document.getElementById('btnRun');
-runBtn.addEventListener('touchstart', e => { e.preventDefault(); touch.running = true; runBtn.classList.add('on'); }, { passive: false });
-runBtn.addEventListener('touchend', e => { e.preventDefault(); touch.running = false; runBtn.classList.remove('on'); }, { passive: false });
-
-const jumpBtn = document.getElementById('btnJump');
-jumpBtn.addEventListener('touchstart', e => { e.preventDefault(); jumpQueued = true; jumpTime = 0.14; }, { passive: false });
-
-const GRAVITY = -22;
-const WALK = 5, RUN = 9, JUMP = 9;
-
-function boxMinMax(s) {
-  const p = s.mesh.position, sz = s.size;
-  return { min: new THREE.Vector3(p.x - sz.x/2, p.y - sz.y/2, p.z - sz.z/2),
-           max: new THREE.Vector3(p.x + sz.x/2, p.y + sz.y/2, p.z + sz.z/2) };
-}
-
-function collide(pos, r) {
-  for (const s of solids) {
-    const { min, max } = boxMinMax(s);
-    if (pos.x + r > min.x && pos.x - r < max.x &&
-        pos.z + r > min.z && pos.z - r < max.z &&
-        pos.y - r < max.y && pos.y + r > min.y) {
-      return { solid: s, min, max };
-    }
-  }
-  return null;
-}
-
-function groundUnder(pos) {
-  let best = 0; // chão base
-  for (const s of solids) {
-    const { min, max } = boxMinMax(s);
-    if (pos.x + 0.2 > min.x && pos.x - 0.2 < max.x &&
-        pos.z + 0.2 > min.z && pos.z - 0.2 < max.z) {
-      if (max.y > best) best = max.y;
-    }
-  }
-  return best;
-}
-
-// ---------- Escalada ----------
-function tryClimb() {
-  const dir = new THREE.Vector3(Math.sin(state.yaw), 0, Math.cos(state.yaw));
-  const look = player.position.clone().add(dir.multiplyScalar(1.2));
-  look.y += 0.9;
-  const hit = collide(look, 0.25);
-  if (hit && hit.solid.climb) {
-    const top = hit.max.y;
-    const targetY = top + 0.6;
-    if (targetY < player.position.y + 5 && targetY > player.position.y + 0.2) {
-      const dx = hit.solid.mesh.position.x - player.position.x;
-      const dz = hit.solid.mesh.position.z - player.position.z;
-      // Sobe gradualmente ao longo da parede
-      player.position.y = THREE.MathUtils.lerp(player.position.y, targetY, 0.24);
-      // Centraliza na frente da parede
-      player.position.x = THREE.MathUtils.lerp(player.position.x, hit.solid.mesh.position.x - Math.sign(dx)*1.6, 0.1);
-      player.position.z = THREE.MathUtils.lerp(player.position.z, hit.solid.mesh.position.z - Math.sign(dz)*1.6, 0.1);
-      // No topo da parede, empurra para cima
-      if (Math.abs(targetY - player.position.y) < 0.4 && !groundUnder(player.position.clone().add(new THREE.Vector3(0, -0.1, 0)))) {
-        player.position.y += 5 * 0.016;
-      }
-      return true;
-    }
-  }
-  return false;
-}
-
-// ---------- Loop ----------
-const clock = new THREE.Clock();
-let climbing = false;
-let jumpQueued = false;   // espaço carregado (buffer ~0.14s)
-let jumpTime = 0;
-let coyote = 0;           // permite saltar 0.12s depois de sair do chão
-let wasGrounded = true;
-
-function animate() {
-  requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
-
-  // Input combinado: teclado (PC) + tátil (telemóvel)
-  let ix = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0) + touch.x;
-  let iz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + touch.y;
-  const running = (keys['ShiftLeft'] || keys['ShiftRight']) || touch.running;
-  state.speed = running ? RUN : WALK;
-
-  const hud = document.getElementById('state');
-  const climbHud = document.getElementById('climb');
-
-  if (running && (ix !== 0 || iz !== 0)) {
-    if (tryClimb()) {
-      climbing = true;
-      hud.textContent = 'A escalar';
-      climbHud.classList.add('show');
-      animateCamera(dt);
-      renderer.render(scene, camera);
-      return; // continua no frame seguinte
-    }
-  }
-  climbHud.classList.remove('show');
-
-  // Gravidade / chão (só "re-aterra" quando está a cair, senão o salto era anulado)
-  const g = groundUnder(player.position);
-  const onGround = player.position.y <= g + 0.05;
-  if (onGround && state.vy <= 0) {
-    player.position.y = g;
-    state.vy = 0;
-    state.grounded = true;
-  } else {
-    state.vy += GRAVITY * dt;
-    player.position.y += state.vy * dt;
-    state.grounded = false;
-  }
-
-  // Temporizadores (buffer de salto + coyote)
-  if (jumpQueued) jumpTime -= dt;
-  else jumpTime = 0;
-  if (!state.grounded) coyote -= dt; else coyote = 0.12;
-  wasGrounded = state.grounded;
-
-  touch.jumpQueued = false;
-  if (jumpTime > 0 && (state.grounded || coyote > 0)) {
-    state.vy = JUMP;
-    state.grounded = false;
-    coyote = -999;   // um salto por carregamento
-    jumpTime = 0;
-  }
-
-  // Movimento horizontal (controlo aéreo reduzido a 60%)
-  if (ix !== 0 || iz !== 0) {
-    const mag = Math.hypot(ix, iz);
-    const yaw = Math.atan2(ix, iz);
-    state.yaw = yaw;
-    const mult = state.grounded ? 1 : 0.6;
-    const vx = Math.sin(yaw) * state.speed * mult / 1;
-    const vz = Math.cos(yaw) * state.speed * mult / 1;
-    const next = player.position.clone();
-    next.x += (vx * mag) * dt;
-    next.z += (vz * mag) * dt;
-    next.y = player.position.y;
-    if (!collide(next, 0.5)) player.position.set(next.x, next.y, next.z);
-  }
-
-  // Face
-  const targetYaw = state.yaw;
-  if (ix !== 0 || iz !== 0) {
-    player.rotation.y = THREE.MathUtils.lerp(
-      THREE.MathUtils.euclideanModulo(player.rotation.y, Math.PI*2),
-      THREE.MathUtils.euclideanModulo(targetYaw, Math.PI*2), 0.15);
-  }
-
-  // Legendas de teclas (feedback visual do que está carregado)
-  const shiftOn = keys['ShiftLeft'] || keys['ShiftRight'];
-  const spaceOn = keys['Space'];
-  keysHud.innerHTML = `<span class="${shiftOn ? 'on' : ''}">Shift ${shiftOn ? '●' : '○'}</span> · <span class="${spaceOn ? 'on' : ''}">Espaço ${spaceOn ? '●' : '○'}</span>`;
-
-  if (state.grounded) hud.textContent = ix||iz ? (running ? 'A correr' : 'A andar') : 'No chão';
-  else hud.textContent = 'No ar';
-  climbing = false;
-
-  animateCamera(dt);
-  renderer.render(scene, camera);
-}
-
-let cYaw = 0;
-function animateCamera(dt) {
-  // Câmera segue atrás do jogador com colisão simples
-  const camDist = 7;
-  const camHeight = 3.2;
-  const desired = new THREE.Vector3(
-    player.position.x - Math.sin(player.rotation.y) * camDist,
-    player.position.y + camHeight,
-    player.position.z - Math.cos(player.rotation.y) * camDist
-  );
-  camera.position.lerp(desired, 1 - Math.pow(0.001, dt));
-  camera.lookAt(player.position.x, player.position.y + 1.2, player.position.z);
-  camera.near = 0.1;
-}
-
-animate();
-
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-</script>
+  <footer>Gamerz — plataforma de jogos</footer>
 </body>
 </html>

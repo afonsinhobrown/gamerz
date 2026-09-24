@@ -33,9 +33,14 @@ Cada jogo é uma página própria (ex.: `tower.html`) e o hub lista os jogos dis
 - **Vitória:** chegar ao topo após limpar o 5º andar.
 - Personagens ainda são **placeholders** (bonecos de blocos), prontos para trocar por modelos 3D `.glb`.
 
-### Jogo 2 — Exploração "Uncharted" (`prototype/index.html`)
+### Jogo 2 — Exploração "Uncharted" (`prototype/explore.html`)
 - Protótipo inicial de exploração: andar, correr, saltar, escalar, câmara 3ª pessoa.
 - Serve de base técnica (movimento, câmara, controles).
+
+### Landing page / Hub (`prototype/index.html`)
+- Página inicial com a lista de jogos para selecionar (sem escrever endereços).
+- Basta abrir `gamerz-plum.vercel.app` e escolher o jogo.
+- Cartão "Em breve" para novos jogos.
 
 ---
 
@@ -50,14 +55,11 @@ Cada jogo é uma página própria (ex.: `tower.html`) e o hub lista os jogos dis
 7. **Bugs corrigidos:** o jogo não desenhava; o salto era cancelado no chão
 8. **Testes automatizados** em Node a provar salto e corrida
 9. **Tower Brawler v1** criado (`tower.html`)
+10. **Hub / landing page** criado (`index.html`) — lista de jogos com seleção
 
 ---
 
-## Próximo passo — Hub multi-jogo + Personagens 3D
-
-### Hub de jogos
-- Página inicial que lista todos os jogos e permite entrar em cada um.
-- Estrutura para adicionar jogos 2, 3, 4... facilmente.
+## Próximo passo — Personagens 3D
 
 ### Personagens 3D
 | Tema | Detalhe |
@@ -71,12 +73,11 @@ Cada jogo é uma página própria (ex.: `tower.html`) e o hub lista os jogos dis
 
 ## Fila de trabalho (ordem sugerida)
 
-1. Criar o **hub** (página inicial com a lista de jogos)
-2. Melhorar o **Tower Brawler**: feedback de combate, som, progressão de dificuldade
-3. Carregar **1 personagem 3D** e trocar os placeholders
-4. Ligar as **animações** aos estados (andar, atacar, morrer)
-5. Adicionar **Jogo 2**
-6. Mais tarde: sistema de **pagamento/acesso** (secção 8 do GDD)
+1. Melhorar o **Tower Brawler**: feedback de combate, som, progressão de dificuldade
+2. Carregar **1 personagem 3D** e trocar os placeholders
+3. Ligar as **animações** aos estados (andar, atacar, morrer)
+4. Adicionar **Jogo 3**
+5. Mais tarde: sistema de **pagamento/acesso** (secção 8 do GDD)
 
 ---
 
