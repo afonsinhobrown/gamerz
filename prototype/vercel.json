@@ -1,0 +1,4 @@
+{
+  "version": 2,
+  "builds": [{ "src": "**/*.{html,js,css,json,png,jpg,svg,webp,glb}", "use": "@vercel/static" }]
+}
