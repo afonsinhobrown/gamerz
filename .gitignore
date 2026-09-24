@@ -1,0 +1,17 @@
+# Node
+node_modules/
+dist/
+*.log
+
+# Unity (quando adicionarmos)
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]serSettings/
+
+# Sistema
+.DS_Store
+Thumbs.db

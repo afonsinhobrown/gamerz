@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gamerz — Protótipo Browser</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0e14; font-family: system-ui, sans-serif; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; inset: 0; pointer-events: none;
+    color: #e8eef5; text-shadow: 0 1px 3px rgba(0,0,0,.8);
+    display: flex; flex-direction: column; justify-content: flex-end;
+    padding: 16px 20px; gap: 4px; font-size: 13px; letter-spacing: .5px;
+  }
+  #hud b { font-size: 15px; }
+  #hint { opacity: .75; }
+  #climb { color: #ffd27f; font-weight: 700; opacity: 0; transition: opacity .15s; }
+  #climb.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div><b id="state">No chão</b></div>
+  <div id="climb">▲ Segura [Shift] para escalar</div>
+  <div id="hint">WASD mover · Shift correr/escalar · Espaço saltar</div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// ---------- Setup básico ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0e14);
+scene.fog = new THREE.Fog(0x0a0e14, 30, 90);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 6, -8);
+
+// Luzes
+const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x3a3328, 0.9);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff2d6, 1.6);
+sun.position.set(20, 30, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -30; sun.shadow.camera.right = 30;
+sun.shadow.camera.top = 30; sun.shadow.camera.bottom = -30;
+scene.add(sun);
+
+// ---------- Nível de teste ----------
+const world = new THREE.Group();
+scene.add(world);
+
+const GROUND = new THREE.Mesh(
+  new THREE.BoxGeometry(40, 1, 40),
+  new THREE.MeshStandardMaterial({ color: 0x6b5c47, roughness: 0.95 })
+);
+GROUND.position.y = -0.5;
+GROUND.receiveShadow = true;
+world.add(GROUND);
+
+// Obstáculos / plataformas (elementos com físico + hitscan para escalada)
+const solids = [];
+function solid(x, y, z, w, h, d, color = 0x8a7a63) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.9 }));
+  m.position.set(x, y, z);
+  m.castShadow = m.receiveShadow = true;
+  world.add(m);
+  solids.push({ mesh: m, size: new THREE.Vector3(w, h, d) });
+  return m;
+}
+
+// Paredes de escalada marcadas (usa cor especial)
+const CLIMB_COLOR = 0x4a6fa5;
+function climbWall(x, z, w, h, d, color = CLIMB_COLOR) {
+  const c = 0x2c4a72;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.2 }));
+  m.position.set(x, h / 2, z);
+  m.castShadow = m.receiveShadow = true;
+  world.add(m);
+  solids.push({ mesh: m, size: new THREE.Vector3(w, h, d), climb: true });
+}
+
+// Plataformas de salto
+solid(6, 2, -6, 3, 4, 3, 0x8a7a63);
+solid(11, 3.5, -6, 3, 7, 3, 0x8a7a63);
+solid(16, 5, -6, 3, 10, 3, 0x8a7a63);
+
+// Parede de escalada + topo
+climbWall(-8, 0, 3, 6, 3);
+solid(-8, 6, -3, 5, 1, 5, 0x9c8a6f);
+climbWall(-8, 8, 3, 4, 3);
+solid(-8, 8, -3, 5, 1, 5, 0x9c8a6f);
+
+// Segundo curso de escalada
+climbWall(0, 10, 3, 5, 3);
+solid(0, 9.5, 8, 5, 1, 5, 0x9c8a6f);
+
+// ---------- Personagem ----------
+const player = new THREE.Group();
+const body = new THREE.Mesh(
+  new THREE.CapsuleGeometry(0.45, 0.9, 6, 12),
+  new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.7, metalness: 0.3 })
+);
+const coat = new THREE.Mesh(
+  new THREE.CapsuleGeometry(0.5, 0.7, 6, 12),
+  new THREE.MeshStandardMaterial({ color: 0x101014, roughness: 0.8 })
+);
+coat.position.y = 0.15;
+player.add(coat, body);
+player.position.set(0, 1, 4);
+scene.add(player);
+
+// ---------- Estado / física simples ----------
+const state = {
+  grounded: true, climbing: false, jumpHeld: false,
+  vy: 0, speed: 0, yaw: 0,
+};
+const keys = {};
+addEventListener('keydown', e => { keys[e.code] = true; });
+addEventListener('keyup', e => { keys[e.code] = false; });
+
+const GRAVITY = -22;
+const WALK = 5, RUN = 9, JUMP = 9;
+
+function boxMinMax(s) {
+  const p = s.mesh.position, sz = s.size;
+  return { min: new THREE.Vector3(p.x - sz.x/2, p.y - sz.y/2, p.z - sz.z/2),
+           max: new THREE.Vector3(p.x + sz.x/2, p.y + sz.y/2, p.z + sz.z/2) };
+}
+
+function collide(pos, r) {
+  for (const s of solids) {
+    const { min, max } = boxMinMax(s);
+    if (pos.x + r > min.x && pos.x - r < max.x &&
+        pos.z + r > min.z && pos.z - r < max.z &&
+        pos.y - r < max.y && pos.y + r > min.y) {
+      return { solid: s, min, max };
+    }
+  }
+  return null;
+}
+
+function groundUnder(pos) {
+  let best = 0; // chão base
+  for (const s of solids) {
+    const { min, max } = boxMinMax(s);
+    if (pos.x + 0.2 > min.x && pos.x - 0.2 < max.x &&
+        pos.z + 0.2 > min.z && pos.z - 0.2 < max.z) {
+      if (max.y > best) best = max.y;
+    }
+  }
+  return best;
+}
+
+// ---------- Escalada ----------
+function tryClimb() {
+  const dir = new THREE.Vector3(Math.sin(state.yaw), 0, Math.cos(state.yaw));
+  const look = player.position.clone().add(dir.multiplyScalar(1.2));
+  look.y += 0.9;
+  const hit = collide(look, 0.25);
+  if (hit && hit.solid.climb) {
+    const top = hit.max.y;
+    const targetY = top + 0.6;
+    if (targetY < player.position.y + 5 && targetY > player.position.y + 0.2) {
+      const dx = hit.solid.mesh.position.x - player.position.x;
+      const dz = hit.solid.mesh.position.z - player.position.z;
+      // Sobe gradualmente ao longo da parede
+      player.position.y = THREE.MathUtils.lerp(player.position.y, targetY, 0.24);
+      // Centraliza na frente da parede
+      player.position.x = THREE.MathUtils.lerp(player.position.x, hit.solid.mesh.position.x - Math.sign(dx)*1.6, 0.1);
+      player.position.z = THREE.MathUtils.lerp(player.position.z, hit.solid.mesh.position.z - Math.sign(dz)*1.6, 0.1);
+      // No topo da parede, empurra para cima
+      if (Math.abs(targetY - player.position.y) < 0.4 && !groundUnder(player.position.clone().add(new THREE.Vector3(0, -0.1, 0)))) {
+        player.position.y += 5 * 0.016;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+// ---------- Loop ----------
+const clock = new THREE.Clock();
+let climbing = false;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  // Input de movimento
+  let ix = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
+  let iz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0);
+  const running = keys['ShiftLeft'] || keys['ShiftRight'];
+  state.speed = running ? RUN : WALK;
+
+  const hud = document.getElementById('state');
+  const climbHud = document.getElementById('climb');
+
+  if (running && (ix !== 0 || iz !== 0)) {
+    if (tryClimb()) {
+      climbing = true;
+      hud.textContent = 'A escalar';
+      climbHud.classList.add('show');
+      animateCamera(dt);
+      return; // continua no frame seguinte
+    }
+  }
+  climbHud.classList.remove('show');
+
+  // Gravidade / chão
+  const g = groundUnder(player.position);
+  if (player.position.y > g + 0.05) {
+    state.vy += GRAVITY * dt;
+    player.position.y += state.vy * dt;
+  } else {
+    if (player.position.y < g) player.position.y = g;
+    state.grounded = true;
+    state.vy = 0;
+  }
+
+  // Salto
+  if (keys['Space'] && state.grounded) {
+    state.vy = JUMP;
+    state.grounded = false;
+  }
+
+  // Movimento horizontal (controlo aéreo reduzido a 60%)
+  if (ix !== 0 || iz !== 0) {
+    const mag = Math.hypot(ix, iz);
+    const yaw = Math.atan2(ix, iz);
+    state.yaw = yaw;
+    const mult = state.grounded ? 1 : 0.6;
+    const vx = Math.sin(yaw) * state.speed * mult / 1;
+    const vz = Math.cos(yaw) * state.speed * mult / 1;
+    const next = player.position.clone();
+    next.x += (vx * mag) * dt;
+    next.z += (vz * mag) * dt;
+    next.y = player.position.y;
+    if (!collide(next, 0.5)) player.position.set(next.x, next.y, next.z);
+  }
+
+  // Face
+  const targetYaw = state.yaw;
+  if (ix !== 0 || iz !== 0) {
+    player.rotation.y = THREE.MathUtils.lerp(
+      THREE.MathUtils.euclideanModulo(player.rotation.y, Math.PI*2),
+      THREE.MathUtils.euclideanModulo(targetYaw, Math.PI*2), 0.15);
+  }
+
+  if (state.grounded) hud.textContent = ix||iz ? (running ? 'A correr' : 'A andar') : 'No chão';
+  else hud.textContent = 'No ar';
+  climbing = false;
+
+  animateCamera(dt);
+}
+
+let cYaw = 0;
+function animateCamera(dt) {
+  // Câmera segue atrás do jogador com colisão simples
+  const camDist = 7;
+  const camHeight = 3.2;
+  const desired = new THREE.Vector3(
+    player.position.x - Math.sin(player.rotation.y) * camDist,
+    player.position.y + camHeight,
+    player.position.z - Math.cos(player.rotation.y) * camDist
+  );
+  camera.position.lerp(desired, 1 - Math.pow(0.001, dt));
+  camera.lookAt(player.position.x, player.position.y + 1.2, player.position.z);
+  camera.near = 0.1;
+}
+
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
