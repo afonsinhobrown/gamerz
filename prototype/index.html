@@ -215,6 +215,7 @@ function animate() {
       hud.textContent = 'A escalar';
       climbHud.classList.add('show');
       animateCamera(dt);
+      renderer.render(scene, camera);
       return; // continua no frame seguinte
     }
   }
@@ -265,6 +266,7 @@ function animate() {
   climbing = false;
 
   animateCamera(dt);
+  renderer.render(scene, camera);
 }
 
 let cYaw = 0;
