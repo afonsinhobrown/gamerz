@@ -73,6 +73,7 @@
 </script>
 <script type="module">
 import * as THREE from 'three';
+import { Character, PRESETS } from './characters.js';
 
 // ---------- Setup básico ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -151,18 +152,8 @@ climbWall(0, 10, 3, 5, 3);
 solid(0, 9.5, 8, 5, 1, 5, 0x9c8a6f);
 
 // ---------- Personagem ----------
-const player = new THREE.Group();
-const body = new THREE.Mesh(
-  new THREE.CapsuleGeometry(0.45, 0.9, 6, 12),
-  new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.7, metalness: 0.3 })
-);
-const coat = new THREE.Mesh(
-  new THREE.CapsuleGeometry(0.5, 0.7, 6, 12),
-  new THREE.MeshStandardMaterial({ color: 0x101014, roughness: 0.8 })
-);
-coat.position.y = 0.15;
-player.add(coat, body);
-player.position.set(0, 1, 4);
+const player = new Character({ preset: PRESETS.explorer });
+player.position.set(0, 0, 4);
 scene.add(player);
 
 // ---------- Estado / física simples ----------
@@ -320,6 +311,7 @@ function animate() {
       climbing = true;
       hud.textContent = 'A escalar';
       climbHud.classList.add('show');
+      player.update(dt, { climb: true, grounded: false });
       animateCamera(dt);
       renderer.render(scene, camera);
       return; // continua no frame seguinte
@@ -385,6 +377,13 @@ function animate() {
   if (state.grounded) hud.textContent = ix||iz ? (running ? 'A correr' : 'A andar') : 'No chão';
   else hud.textContent = 'No ar';
   climbing = false;
+
+  const mag = Math.hypot(ix, iz);
+  player.update(dt, {
+    speed: mag > 0.05 ? state.speed * Math.min(1, mag) : 0,
+    grounded: state.grounded,
+    vy: state.vy,
+  });
 
   animateCamera(dt);
   renderer.render(scene, camera);
